@@ -73,5 +73,5 @@ CREATE EXTERNAL TABLE ods_coupon_use(
     'mapreduce.output.fileoutputformat.compress' = 'true',
     'mapreduce.output.fileoutputformat.compress.codec' = 'org.apache.hadoop.io.compress.GzipCodec'
     );
-load data inpath '/origin_data/gmall/coupon_use' into table ods_coupon_use partition (dt='2025-03-24');;
+load data inpath '/origin_data/gmall/coupon_use' into table ods_coupon_use partition (dt='2025-03-24');
 select * from ods_coupon_use;
