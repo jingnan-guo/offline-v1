@@ -58,7 +58,7 @@ public class FlinkSinkUtil {
                 //当前配置决定是否开启事务，保证写到kafka数据的精准一次
                 //.setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
                 //设置事务Id的前缀
-                //.setTransactionalIdPrefix("dwd_base_log_")
+                // .setTransactionalIdPrefix("dwd_base_log_")
                 //设置事务的超时时间   检查点超时时间 <     事务的超时时间 <=事务最大超时时间
                 //.setProperty(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG,15*60*1000+"")
                 .build();

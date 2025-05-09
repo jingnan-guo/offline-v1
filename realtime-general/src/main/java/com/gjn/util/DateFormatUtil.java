@@ -21,7 +21,7 @@ public class DateFormatUtil {
      * @Package com.gjn.util.DateFormatUtil
      * @Author jingnan.guo
      * @Date 2025/4/15 9:29
-     * @description:
+     * @description:  使用SimpleDateFormat进行日期转换的话，存在线程安全的问题
      */
     public static Long dateTimeToTs(String dateTime) {
         LocalDateTime localDateTime = LocalDateTime.parse(dateTime, dtfFull);

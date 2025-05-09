@@ -45,7 +45,7 @@ import java.util.Collections;
  * @Package com.gjn.dws.DwsTradeProvinceOrderWindow
  * @Author jingnan.guo
  * @Date 2025/4/17 11:47
- * @description: 2
+ * @description: 按照省份汇总和分析订单数据  数据源: dwd_trade_order_detail
  */
 public class DwsTradeProvinceOrderWindow {
     @SneakyThrows
@@ -116,7 +116,7 @@ public class DwsTradeProvinceOrderWindow {
             }
         );
 //        distinctDS.print();
-
+        // 设置 水位线
         SingleOutputStreamOperator<JSONObject> withWatermarkDS = distinctDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy
                         .<JSONObject>forMonotonousTimestamps()
@@ -131,6 +131,7 @@ public class DwsTradeProvinceOrderWindow {
         );
 //        withWatermarkDS.print();
 
+        // 将数据流 jsonobject 类型转换为 TradeProvinceOrderBean
         SingleOutputStreamOperator<TradeProvinceOrderBean> beanDS = withWatermarkDS.map(
                 new MapFunction<JSONObject, TradeProvinceOrderBean>() {
                     @Override
@@ -153,12 +154,13 @@ public class DwsTradeProvinceOrderWindow {
 
 //        beanDS.print();
 
+        //将数据流进行keyby 操作  根据ProvinceId
         KeyedStream<TradeProvinceOrderBean, String> provinceIdKeyedDS = beanDS.keyBy(TradeProvinceOrderBean::getProvinceId);
         provinceIdKeyedDS.print();
-//TODO 7.开窗
+        // 开窗
         WindowedStream<TradeProvinceOrderBean, String, TimeWindow> windowDS = provinceIdKeyedDS.window(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(1)));
 
-//TODO 8.聚合
+        //聚合
         SingleOutputStreamOperator<TradeProvinceOrderBean> reduceDS = windowDS.reduce(
                 new ReduceFunction<TradeProvinceOrderBean>() {
                     @Override
@@ -188,6 +190,7 @@ public class DwsTradeProvinceOrderWindow {
         );
         reduceDS.print(">>>>reduce");
 
+        // 链接 hbase维度表  查询 地区维度表 dim_base_province  给TradeProvinceOrderBean添加字段
         SingleOutputStreamOperator<TradeProvinceOrderBean> withProvinceDS = reduceDS.map(
 
                 new RichMapFunction<TradeProvinceOrderBean, TradeProvinceOrderBean>() {
@@ -214,6 +217,7 @@ public class DwsTradeProvinceOrderWindow {
                 }
         );
         withProvinceDS.print(">>>>>>>with");
+
         withProvinceDS
                 .map(new BeanToJsonStrMapFunction<>())
                 .sinkTo(FlinkSinkUtil.getDorisSink("dws_trade_province_order_window"));

@@ -6,7 +6,7 @@ import com.gjn.constant.Constant;
  * @Package com.gjn.util.SQLUtil
  * @Author jingnan.guo
  * @Date 2025/4/15 9:29
- * @description:
+ * @description: FlinkSQL操作的工具类
  */
 public class SQLUtil {
     //获取kafka连接器的连接属性

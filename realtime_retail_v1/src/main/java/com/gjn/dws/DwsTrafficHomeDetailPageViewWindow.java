@@ -38,7 +38,7 @@ import org.apache.flink.util.Collector;
  * @Package com.gjn.dws.DwsTrafficHomeDetailPageViewWindow
  * @Author jingnan.guo
  * @Date 2025/4/17 11:47
- * @description: 首页、详情页独立访客聚合统计
+ * @description: 首页、详情页独立访客聚合统计 数据源 dwd_traffic_page
  */
 public class DwsTrafficHomeDetailPageViewWindow {
     @SneakyThrows
@@ -70,6 +70,7 @@ public class DwsTrafficHomeDetailPageViewWindow {
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.map(JSON::parseObject);
 //        {"common":{"ar":"29","uid":"42","os":"Android 12.0","ch":"xiaomi","is_new":"1","md":"xiaomi 13","mid":"mid_147","vc":"v2.1.111","ba":"xiaomi","sid":"49eb15e1-2ff1-4d8e-88fd-30df3c129ae9"},"page":{"page_id":"order","item":"34","during_time":15545,"item_type":"sku_ids","last_page_id":"good_detail"},"ts":1743867019723}
 
+        // 过滤json 数据   只保留 page_id 为 "home" 或 "good_detail" 的对象
         SingleOutputStreamOperator<JSONObject> filterDS = jsonObjDS.filter(new FilterFunction<JSONObject>() {
             @Override
             public boolean filter(JSONObject jsonObject) throws Exception {
@@ -80,6 +81,7 @@ public class DwsTrafficHomeDetailPageViewWindow {
         });
 //        {"common":{"ar":"33","uid":"639","os":"iOS 13.3.1","ch":"Appstore","is_new":"0","md":"iPhone 14 Plus","mid":"mid_106","vc":"v2.1.134","ba":"iPhone","sid":"4e85b3cf-9c8d-48d7-9ace-77bc12557578"},"page":{"page_id":"good_detail","item":"21","during_time":13266,"item_type":"sku_id","last_page_id":"register"},"ts":1743865970843}
 
+        // 每个事件分配时间戳
         SingleOutputStreamOperator<JSONObject> withWatermarkDS = filterDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy.<JSONObject>forMonotonousTimestamps().withTimestampAssigner(
                         new SerializableTimestampAssigner<JSONObject>() {
@@ -91,10 +93,11 @@ public class DwsTrafficHomeDetailPageViewWindow {
                 )
         );
 //        {"common":{"ar":"33","uid":"639","os":"iOS 13.3.1","ch":"Appstore","is_new":"0","md":"iPhone 14 Plus","mid":"mid_106","vc":"v2.1.134","ba":"iPhone","sid":"4e85b3cf-9c8d-48d7-9ace-77bc12557578"},"page":{"page_id":"good_detail","item":"21","during_time":13266,"item_type":"sku_id","last_page_id":"register"},"ts":1743865970843}
-
+        //  将数据流按照 mid 进行分区
         KeyedStream<JSONObject, String> keyedDS = withWatermarkDS.keyBy(o -> o.getJSONObject("common").getString("mid"));
 //        {"common":{"ar":"33","uid":"639","os":"iOS 13.3.1","ch":"Appstore","is_new":"0","md":"iPhone 14 Plus","mid":"mid_106","vc":"v2.1.134","ba":"iPhone","sid":"4e85b3cf-9c8d-48d7-9ace-77bc12557578"},"page":{"page_id":"good_detail","item":"21","during_time":13266,"item_type":"sku_id","last_page_id":"register"},"ts":1743865970843}
 
+        //判断是否为新用户
         SingleOutputStreamOperator<TrafficHomeDetailPageViewBean> beanDS = keyedDS.process(new KeyedProcessFunction<String, JSONObject, TrafficHomeDetailPageViewBean>() {
 
             private ValueState<String> homeLastVisitDateState;
@@ -119,6 +122,7 @@ public class DwsTrafficHomeDetailPageViewWindow {
                 Long detailUvCt = 0L;
                 Long ts = jsonObject.getLong("ts");
                 String curVisitDate = DateFormatUtil.tsToDate(ts);
+                // 获取上次访问日期
                 if ("home".equals(pageId)) {
                     String homeLastVisitDate = homeLastVisitDateState.value();
                     if (StringUtils.isEmpty(homeLastVisitDate) || !homeLastVisitDate.equals(curVisitDate)) {
@@ -141,8 +145,10 @@ public class DwsTrafficHomeDetailPageViewWindow {
         });
 //        TrafficHomeDetailPageViewBean(stt=, edt=, curDate=, homeUvCt=0, goodDetailUvCt=1, ts=1743866296954)
 
+        // 10秒滚动 时间窗口
         AllWindowedStream<TrafficHomeDetailPageViewBean, TimeWindow> windowDS = beanDS.windowAll(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
 
+        //进行字段累加  格式化窗口的时间戳信息，并将聚合后的结果输出
         SingleOutputStreamOperator<TrafficHomeDetailPageViewBean> reduceDS = windowDS.reduce(
                 new ReduceFunction<TrafficHomeDetailPageViewBean>() {
                     @Override

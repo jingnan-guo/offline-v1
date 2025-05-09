@@ -8,7 +8,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dwd.DwdTradeCartAdd
  * @Author jingnan.guo
  * @Date 2025/4/15 10:57
- * @description:
+ * @description:  加购事实表      stream_realtime_dev1
  */
 public class DwdTradeCartAdd  {
     public static void main(String[] args) throws Exception {
@@ -16,7 +16,8 @@ public class DwdTradeCartAdd  {
 
 
         StreamTableEnvironment tenv = StreamTableEnvironment.create(env);
-//
+
+        //从kafka的topic_db主题中读取数据  创建动态表
         tenv.executeSql("" +
                 "CREATE TABLE db (\n" +
                 "  before MAP<string,string>,\n" +
@@ -36,8 +37,9 @@ public class DwdTradeCartAdd  {
 
 
         Table table = tenv.sqlQuery("select * from db");
-//        tenv.toChangelogStream(table).print();
+        tenv.toChangelogStream(table).print();
 
+        //  过滤出加购数据
         Table table1 = tenv.sqlQuery("select " +
                 "after['id'] as id," +
                 "after['user_id'] as user_id," +
@@ -54,7 +56,7 @@ public class DwdTradeCartAdd  {
 
 
 
-
+        //  将过滤出来的加购数据写到kafka主题中
         tenv.executeSql("CREATE TABLE dwd_trade_cart_add (\n" +
                 "  id STRING,\n" +
                 "  user_id STRING,\n" +

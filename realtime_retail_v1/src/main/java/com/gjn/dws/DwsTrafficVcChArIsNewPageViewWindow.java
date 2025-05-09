@@ -39,7 +39,7 @@ import org.apache.flink.util.Collector;
  *  @Package com.gjn.dws.DwsTrafficVcChArIsNewPageViewWindow
  *  @Author jingnan.guo
  *  @Date 2025/4/17 11:47
- * @description: 2
+ * @description:  按照版本、地区、渠道、新老访客对pv、uv、sv、dur进行聚合统计   数据源：dwd_traffic_page
  */
 public class DwsTrafficVcChArIsNewPageViewWindow {
     public static  void main(String[] args) throws Exception {
@@ -69,13 +69,16 @@ public class DwsTrafficVcChArIsNewPageViewWindow {
 
 //        {"common":{"ar":"3","uid":"301","os":"Android 13.0","ch":"360","is_new":"1","md":"Redmi k50","mid":"mid_273","vc":"v2.0.1","ba":"Redmi","sid":"d5c3d8a4-6d4d-4e76-92be-28240f9ae9ae"},"page":{"page_id":"cart","during_time":5434,"last_page_id":"good_detail"},"ts":1743865917542}
 //        {"common":{"ar":"3","uid":"638","os":"Android 13.0","ch":"xiaomi","is_new":"0","md":"realme Neo2","mid":"mid_17","vc":"v2.1.134","ba":"realme","sid":"c6111002-3d81-4ecb-bba5-658c29d00c47"},"page":{"page_id":"payment","item":"2257","during_time":10736,"item_type":"order_id","last_page_id":"order"},"ts":1743864652487}
+        // 将数据类型转换为 JSONObject
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.map(JSON::parseObject);
 
 //        {"common":{"ar":"1","uid":"640","os":"Android 13.0","ch":"oppo","is_new":"0","md":"xiaomi 13 Pro ","mid":"mid_278","vc":"v2.1.134","ba":"xiaomi","sid":"8207c377-615e-4d4f-83f9-497dbc90f35b"},"page":{"page_id":"order","item":"17","during_time":7652,"item_type":"sku_ids","last_page_id":"cart"},"ts":1743866530371}
 //        {"common":{"ar":"29","uid":"42","os":"Android 12.0","ch":"xiaomi","is_new":"1","md":"xiaomi 13","mid":"mid_147","vc":"v2.1.111","ba":"xiaomi","sid":"49eb15e1-2ff1-4d8e-88fd-30df3c129ae9"},"page":{"page_id":"order","item":"34","during_time":15545,"item_type":"sku_ids","last_page_id":"good_detail"},"ts":1743867019723}
 
-
+        // 按照mid对流中数据进行分组（计算UV）
         KeyedStream<JSONObject, String> midKeyedDS = jsonObjDS.keyBy(o -> o.getJSONObject("common").getString("mid"));
+
+        // 再次对流中数据进行类型转换  jsonObj->统计的实体类对象
         SingleOutputStreamOperator<TrafficPageViewBean> beanDS = midKeyedDS.map(
             new RichMapFunction<JSONObject, TrafficPageViewBean>() {
                 private ValueState<String> lastVisitDateState;
@@ -126,7 +129,7 @@ public class DwsTrafficVcChArIsNewPageViewWindow {
         );
 //        TrafficPageViewBean(stt=, edt=, cur_date=, vc=v2.1.134, ch=xiaomi, ar=3, isNew=0, uvCt=0, svCt=0, pvCt=1, durSum=10736, ts=1743864652487)
 //        TrafficPageViewBean(stt=, edt=, cur_date=, vc=v2.1.134, ch=oppo, ar=1, isNew=0, uvCt=0, svCt=0, pvCt=1, durSum=7652, ts=1743866530371)
-
+        //指定Watermark以及提取事件时间字段
         SingleOutputStreamOperator<TrafficPageViewBean> withWatermarkDS = beanDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy.<TrafficPageViewBean>forMonotonousTimestamps().withTimestampAssigner(
                         new SerializableTimestampAssigner<TrafficPageViewBean>() {
@@ -138,7 +141,9 @@ public class DwsTrafficVcChArIsNewPageViewWindow {
                 )
         );
 
-        KeyedStream<TrafficPageViewBean, Tuple4<String, String, String, String>> dimKeyDS = withWatermarkDS.keyBy(new KeySelector<TrafficPageViewBean, Tuple4<String, String, String, String>>() {
+        //  分组--按照统计的维度进行分组
+        KeyedStream<TrafficPageViewBean, Tuple4<String, String, String, String>> dimKeyDS = withWatermarkDS.
+                keyBy(new KeySelector<TrafficPageViewBean, Tuple4<String, String, String, String>>() {
             @Override
             public Tuple4<String, String, String, String> getKey(TrafficPageViewBean bean) throws Exception {
                 return Tuple4.of(
@@ -149,8 +154,10 @@ public class DwsTrafficVcChArIsNewPageViewWindow {
                 );
             }
         });
+        // 开窗
         WindowedStream<TrafficPageViewBean, Tuple4<String, String, String, String>, TimeWindow> windowDS = dimKeyDS.window(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
 
+        //  聚合计算
         SingleOutputStreamOperator<TrafficPageViewBean> reduceDS = windowDS.reduce(
                 new ReduceFunction<TrafficPageViewBean>() {
 
@@ -178,6 +185,7 @@ public class DwsTrafficVcChArIsNewPageViewWindow {
                 }
         );
 //        reduceDS.print();
+        //将聚合的结果写到Doris表
         reduceDS.map(new BeanToJsonStrMapFunction<TrafficPageViewBean>()).
                 sinkTo(FlinkSinkUtil.getDorisSink("dws_traffic_vc_ch_ar_is_new_page_view_window"));
 

@@ -21,7 +21,7 @@ import java.util.Map;
  * @Package com.gjn.function.TalbleProcessFunction
  * @Author jingnan.guo
  * @Date 2025/4/14 9:54
- * @description:处理主流业务数据和广播流配置数据关联后的逻辑
+ * @description: 处理主流业务数据和广播流配置数据关联后的逻辑
  */
 public class TalbleProcessFunction extends BroadcastProcessFunction<JSONObject, TableProcessDim, Tuple2<JSONObject,TableProcessDim>> {
 

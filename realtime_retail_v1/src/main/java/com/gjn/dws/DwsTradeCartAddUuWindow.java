@@ -37,7 +37,7 @@ import org.apache.flink.util.Collector;
  * @Package com.gjn.dws.DwsTradeCartAddUuWindow
  * @Author jingnan.guo
  * @Date 2025/4/17 11:47
- * @description: 加购独立用户统计
+ * @description: 加购独立用户统计  数据源: dwd_trade_cart_add
  */
 public class DwsTradeCartAddUuWindow {
     @SneakyThrows
@@ -83,6 +83,7 @@ public class DwsTradeCartAddUuWindow {
 
         KeyedStream<JSONObject, String> keyedDS = withWatermarkDS.keyBy(o -> o.getString("user_id"));
 
+        //确保在一天内不会重复输出同一天的多条数据
         SingleOutputStreamOperator<JSONObject> cartUUDS = keyedDS.process(
                 new KeyedProcessFunction<String, JSONObject, JSONObject>() {
 
@@ -111,6 +112,7 @@ public class DwsTradeCartAddUuWindow {
         AllWindowedStream<JSONObject, TimeWindow> windowDS
                 = cartUUDS.windowAll(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
 
+        //进行窗口函数 聚合 将结果转换为 CartAddUuBean实体类对象
         SingleOutputStreamOperator<CartAddUuBean> aggregateDS = windowDS.aggregate(
                 new AggregateFunction<JSONObject, Long, Long>() {
                     @Override

@@ -8,7 +8,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dwd.DwdTradeOrderPaySucDetail
  * @Author jingnan.guo
  * @Date 2025/4/16 10:57
- * @description:
+ * @description:  支付成功事实表
  *
  */
 public class DwdTradeOrderPaySucDetail  {
@@ -18,6 +18,7 @@ public class DwdTradeOrderPaySucDetail  {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         StreamTableEnvironment tenv = StreamTableEnvironment.create(env);
+        //从下单事实表读取数据 创建动态表
         tenv.executeSql("CREATE TABLE dwd_trade_order_detail (\n" +
                 "id STRING,\n" +
                 "order_id STRING,\n" +
@@ -52,6 +53,7 @@ public class DwdTradeOrderPaySucDetail  {
         Table sql = tenv.sqlQuery("select * from dwd_trade_order_detail");
 //        tenv.toChangelogStream(sql).print();
 
+        //从topic_db主题中读取数据  创建动态表
         tenv.executeSql("" +
                 "CREATE TABLE db (\n" +
                 "  before MAP<string,string>,\n" +
@@ -71,7 +73,7 @@ public class DwdTradeOrderPaySucDetail  {
                 "  'format' = 'json'\n" +
                 ")");
 
-
+        // 从HBase中读取字典数据 创建动态表
         tenv.executeSql("CREATE TABLE base_dic (\n" +
                 " dic_code String,\n" +
                 " info ROW<dic_name String>,\n" +
@@ -84,6 +86,7 @@ public class DwdTradeOrderPaySucDetail  {
 
 
 
+        // 过滤出支付成功数据
         Table paymentInfo = tenv.sqlQuery("select " +
                 "after['user_id'] user_id," +
                 "after['order_id'] order_id," +
@@ -99,6 +102,8 @@ public class DwdTradeOrderPaySucDetail  {
                 "and `after`['payment_status']='1602' ");
 
         tenv.createTemporaryView("payment_info", paymentInfo);
+
+        // 和字典进行关联  和下单数据进行关联
         Table result = tenv.sqlQuery(
                 "select " +
                         "od.id order_detail_id," +
@@ -128,7 +133,7 @@ public class DwdTradeOrderPaySucDetail  {
                         "on pi.payment_type=dic.dic_code ");
         tenv.toChangelogStream(result).print();
 
-
+        //将关联的结果写到kafka主题中
         tenv.executeSql("create table dwd_trade_order_payment_success(" +
                 "order_detail_id string," +
                 "order_id string," +

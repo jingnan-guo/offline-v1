@@ -11,7 +11,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dwd.DwdTradeOrderDetail
  * @Author jingnan.guo
  * @Date 2025/4/16 10:57
- * @description:
+ * @description:   下单事实表
  *      zk、kafka、maxwell、DwdTradeOrderDetail
  */
 public class DwdTradeOrderDetail  {
@@ -23,7 +23,7 @@ public class DwdTradeOrderDetail  {
         env.enableCheckpointing(5000L, CheckpointingMode.EXACTLY_ONCE);
         env.setRestartStrategy(RestartStrategies.failureRateRestart(3, Time.days(30),Time.seconds(3)));
 
-
+        //从kafka的topic_db主题中读取数据 创建动态表
         tenv.executeSql("" +
                 "CREATE TABLE db (\n" +
                 "  before MAP<string,string>,\n" +
@@ -41,6 +41,7 @@ public class DwdTradeOrderDetail  {
                 "  'format' = 'json'\n" +
                 ")");
 
+        //过滤出订单明细数据
         Table orderDetail = tenv.sqlQuery(
                 "select " +
                         "after['id'] id," +
@@ -60,9 +61,10 @@ public class DwdTradeOrderDetail  {
                         "from db " +
                         "where source['table']='order_detail' " +
                         "and `op`='c' ");
-//        tenv.toChangelogStream(orderDetail).print();
+        tenv.toChangelogStream(orderDetail).print();
         tenv.createTemporaryView("order_detail", orderDetail);
 
+        //过滤出订单数据
         Table orderInfo = tenv.sqlQuery(
                 "select " +
                         "after['id'] id," +
@@ -74,6 +76,7 @@ public class DwdTradeOrderDetail  {
 //        tenv.toChangelogStream(orderInfo).print();
         tenv.createTemporaryView("order_info", orderInfo);
 
+        // 过滤出明细活动数据
         Table orderDetailActivity = tenv.sqlQuery(
                 "select " +
                         "after['order_detail_id'] order_detail_id, " +
@@ -82,7 +85,7 @@ public class DwdTradeOrderDetail  {
                         "from db " +
                         "where source['table']='order_detail_activity' " +
                         "and `op`='c' ");
-//        tenv.toChangelogStream(orderDetailActivity).print();
+        tenv.toChangelogStream(orderDetailActivity).print();
         tenv.createTemporaryView("order_detail_activity", orderDetailActivity);
 
         //TODO 过滤出明细优惠券数据
@@ -93,9 +96,10 @@ public class DwdTradeOrderDetail  {
                         "from db " +
                         "where source['table']='order_detail_coupon' " +
                         "and `op`='c' ");
-//        tenv.toChangelogStream(orderDetailCoupon).print();
+        tenv.toChangelogStream(orderDetailCoupon).print();
         tenv.createTemporaryView("order_detail_coupon", orderDetailCoupon);
 
+        // 关联上述4张表
         Table result = tenv.sqlQuery(
                 "select " +
                         "od.id," +
@@ -123,6 +127,7 @@ public class DwdTradeOrderDetail  {
                         "on od.id=cou.order_detail_id ");
         tenv.toChangelogStream(result).print();
 
+        //将关联的结果写到Kafka主题
         tenv.executeSql("CREATE TABLE dwd_trade_order_detail (\n" +
                 "id string," +
                 "order_id string," +

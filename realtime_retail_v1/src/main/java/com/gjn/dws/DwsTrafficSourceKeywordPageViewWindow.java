@@ -13,7 +13,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dws.DwsTrafficSourceKeywordPageViewWindow
  * @Author jingnan.guo
  * @Date 2025/4/14 11:43
- * @description: 1
+ * @description:  搜索关键词的统计  数据源：page_log split_table
  */
 public class DwsTrafficSourceKeywordPageViewWindow {
 
@@ -99,6 +99,5 @@ public class DwsTrafficSourceKeywordPageViewWindow {
                 "  'sink.properties.read_json_by_line' = 'true' " +
                 ")");
         resTable.executeInsert("dws_traffic_source_keyword_page_view_window");
-
     }
 }

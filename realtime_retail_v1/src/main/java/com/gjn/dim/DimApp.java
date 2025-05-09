@@ -106,7 +106,7 @@ public class DimApp {
                 .build();
 
         DataStreamSource<String> kafkaDS = env.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "Kafka Source");
-      //kafkaDS.print(">>>>kafka输出");
+      // kafkaDS.print(">>>>kafka输出");
 //        //TODO 4.对业务流中数据类型进行转换
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaDS.process(new ProcessFunction<String, JSONObject>() {
             @Override

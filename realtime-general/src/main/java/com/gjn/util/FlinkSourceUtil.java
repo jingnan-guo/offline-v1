@@ -15,7 +15,7 @@ import java.util.Properties;
  * @Package com.gjn.util.FlinkSourceUtil
  * @Author jingnan.guo
  * @Date 2025/4/11 18:43
- * @description:
+ * @description:  获取相关Source的工具类
  */
 public class FlinkSourceUtil {
     //获取 kafka source

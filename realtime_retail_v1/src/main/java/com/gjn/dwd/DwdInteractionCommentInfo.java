@@ -8,7 +8,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dwd.DwdInteractionCommentInfo
  * @Author jingnan.guo
  * @Date 2025/4/5 10:57
- * @description:
+ * @description:  评论事实表   数据源： comment_info  dim_base_dic
  */
 public class DwdInteractionCommentInfo {
     public static void main(String[] args) throws Exception {
@@ -38,6 +38,7 @@ public class DwdInteractionCommentInfo {
         Table table = tenv.sqlQuery("select * from db ");
 //        tenv.toChangelogStream(table).print();
 
+        // 评论表
         Table table1 = tenv.sqlQuery("select " +
                 "after['id'] as id," +
                 "after['user_id'] as user_id," +
@@ -51,6 +52,7 @@ public class DwdInteractionCommentInfo {
 
         tenv.createTemporaryView("comment_info",table1);
 
+        //  字典表
         tenv.executeSql("CREATE TABLE hbase (\n" +
                 " dic_code String,\n" +
                 " info ROW<dic_name String>,\n" +
@@ -68,7 +70,7 @@ public class DwdInteractionCommentInfo {
                 " id,user_id,sku_id,appraise,dic.dic_name,comment_txt,ts \n" +
                 "FROM comment_info AS c \n" +
                 "  left join hbase as dic \n" +
-                "    ON c.appraise = dic.dic_code;");
+                "    ON c.appraise = dic.dic_code where id is not null;");
         table3.execute().print();
 
 

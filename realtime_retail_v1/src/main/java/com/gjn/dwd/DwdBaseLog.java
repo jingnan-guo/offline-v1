@@ -31,7 +31,7 @@ import org.apache.flink.util.OutputTag;
  * @Package com.gjn.dwd.DwdBaseLog
  * @Author jingnan.guo
  * @Date 2025/4/15 10:57
- * @description:
+ * @description: 日志分流   数据源：topic_log  日志数据
  */
 public class DwdBaseLog{
     public static void main(String[] args) throws Exception {
@@ -50,6 +50,7 @@ public class DwdBaseLog{
 
 
 
+        //用来过滤和标记处理脏数据 并且将它们单独输出
         OutputTag<String> dirtyTag = new OutputTag<String>("dirtyTag"){};
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.process(
                 new ProcessFunction<String, JSONObject>() {
@@ -68,7 +69,7 @@ public class DwdBaseLog{
         SideOutputDataStream<String> dirtyDS = jsonObjDS.getSideOutput(dirtyTag);
         //dirtyDS.print(">>>>>脏数据:");
 
-
+        //  存储脏数据的topic
         KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
                 .setBootstrapServers("cdh01:9092")
                 .setRecordSerializer(KafkaRecordSerializationSchema.builder()
@@ -81,7 +82,7 @@ public class DwdBaseLog{
 
         dirtyDS.sinkTo(kafkaSink);
 
-
+        //判断新老用户
         KeyedStream<JSONObject, String> keyedDS = jsonObjDS.keyBy(o -> o.getJSONObject("common").getString("mid"));
         SingleOutputStreamOperator<JSONObject> fixedDs = keyedDS.map(
                 new RichMapFunction<JSONObject, JSONObject>() {
@@ -120,6 +121,7 @@ public class DwdBaseLog{
                 });
         fixedDs.print(">>>>>分流");
 
+        //测流输出 错误 启动 曝光 动作
         OutputTag<String> errTag = new OutputTag<String>("errTag"){};
         OutputTag<String> startTag = new OutputTag<String>("startTag"){};
         OutputTag<String> displayTag = new OutputTag<String>("displayTag"){};

@@ -18,7 +18,7 @@ import java.util.*;
  * @Package com.gjn.dwd.BaseDbTableProcessFunction
  * @Author jingnan.guo
  * @Date 2025/4/15 9:29
- * @description:
+ * @description: 事实表动态分流---处理关联后的数据
  */
 public class BaseDbTableProcessFunction extends BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject, TableProcessDwd>> {
 

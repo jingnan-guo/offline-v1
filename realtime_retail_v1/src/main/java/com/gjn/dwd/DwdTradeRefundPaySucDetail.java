@@ -8,7 +8,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dwd.DwdTradeRefundPaySucDetail
  * @Author jingnan.guo
  * @Date 2025/4/16 10:57
- * @description:
+ * @description:    退款成功事实表
  */
 public class DwdTradeRefundPaySucDetail {
     public static void main(String[] args) throws Exception {
@@ -16,7 +16,7 @@ public class DwdTradeRefundPaySucDetail {
         env.setParallelism(1);
         StreamTableEnvironment tenv = StreamTableEnvironment.create(env);
 
-
+        // 从kafka中读取 数据 创建动态表
         tenv.executeSql("" +
                 "CREATE TABLE db (\n" +
                 "  before MAP<string,string>,\n" +
@@ -36,6 +36,7 @@ public class DwdTradeRefundPaySucDetail {
                 "  'format' = 'json'\n" +
                 ")");
 
+        // 从hbase 读取字典表
         tenv.executeSql("CREATE TABLE base_dic (\n" +
                 " dic_code String,\n" +
                 " info ROW<dic_name String>,\n" +
@@ -46,6 +47,7 @@ public class DwdTradeRefundPaySucDetail {
                 " 'zookeeper.quorum' = 'cdh01,cdh02,cdh03:2181'\n" +
                 ");");
 
+        //过滤退款成功表数据
         Table refundPayment = tenv.sqlQuery(
                 "select " +
                         "after['id'] id," +
@@ -63,7 +65,7 @@ public class DwdTradeRefundPaySucDetail {
                         "and `after`['refund_status']='1602'");
         tenv.createTemporaryView("refund_payment", refundPayment);
 
-
+        //过滤退单表中的退单成功的数据
         Table orderRefundInfo = tenv.sqlQuery(
                 "select " +
                         "after['order_id'] order_id," +
@@ -77,7 +79,7 @@ public class DwdTradeRefundPaySucDetail {
 
         tenv.createTemporaryView("order_refund_info", orderRefundInfo);
 
-
+        // 过滤订单表中的退款成功的数据
         Table orderInfo = tenv.sqlQuery(
                 "select " +
                         "after['id'] id," +
@@ -90,7 +92,7 @@ public class DwdTradeRefundPaySucDetail {
                         "and `after`['order_status']='1006'");
         tenv.createTemporaryView("order_info", orderInfo);
 
-
+        //4 张表的 关联
         Table result = tenv.sqlQuery(
                 "select " +
                         "rp.id," +
@@ -114,6 +116,7 @@ public class DwdTradeRefundPaySucDetail {
                         "on rp.payment_type=dic.dic_code ");
         tenv.toChangelogStream(result).print();
 
+        //将关联结果写入kafka主题 dwd_trade_refund_payment_success
         tenv.executeSql(
                 "create table dwd_trade_refund_payment_success(" +
                         "id string," +

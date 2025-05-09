@@ -44,7 +44,7 @@ import java.math.BigDecimal;
  *  @Package com.gjn.dws.DwsTradeSkuOrderWindow
  *  @Author jingnan.guo
  *  @Date 2025/4/17 11:47
- * @description: sku粒度下单业务过程聚合统计
+ * @description: 按照商品(sku)下单业务过程聚合统计  数据源 dwd_trade_order_detail
  */
 public class DwsTradeSkuOrderWindow {
 
@@ -70,6 +70,7 @@ public class DwsTradeSkuOrderWindow {
                 .setValueOnlyDeserializer(new SimpleStringSchema())
                 .build();
 
+        // 读取数据并且转换数据类型
         DataStreamSource<String> kafkaStrDS = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.process(
                 new ProcessFunction<String, JSONObject>() {
@@ -82,9 +83,10 @@ public class DwsTradeSkuOrderWindow {
                     }
                 }
         );
-
+        //根据 id 进行分组
         KeyedStream<JSONObject, String> orderDetailIdKeyedDS = jsonObjDS.keyBy(o -> o.getString("id"));
 
+        // 去重操作  时间戳比较 定时器
         SingleOutputStreamOperator<JSONObject> distinctDS = orderDetailIdKeyedDS.process(
                 new KeyedProcessFunction<String, JSONObject, JSONObject>() {
                     private ValueState<JSONObject> lastJsonObjState;
@@ -125,6 +127,7 @@ public class DwsTradeSkuOrderWindow {
                 }
         );
 
+        // 目的是处理 事件时间
         SingleOutputStreamOperator<JSONObject> withWatermarkDS = distinctDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy
                         .<JSONObject>forMonotonousTimestamps()
@@ -138,6 +141,7 @@ public class DwsTradeSkuOrderWindow {
                         )
         );
 
+        //做了一个 数据类型转换
         SingleOutputStreamOperator<TradeSkuOrderBean> beanDS = withWatermarkDS.map(
                 new MapFunction<JSONObject, TradeSkuOrderBean>() {
                     @Override
@@ -162,12 +166,14 @@ public class DwsTradeSkuOrderWindow {
                 }
         );
 
+        // 根据商品id 分组
         KeyedStream<TradeSkuOrderBean, String> skuIdKeyedDS = beanDS.keyBy(TradeSkuOrderBean::getSkuId);
 
 
-        WindowedStream<TradeSkuOrderBean, String, TimeWindow> windowDS = skuIdKeyedDS.window(TumblingProcessingTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
-
-        SingleOutputStreamOperator<TradeSkuOrderBean> reduceDS = windowDS.reduce(
+        // 窗口操作 10秒滚动
+       WindowedStream<TradeSkuOrderBean, String, TimeWindow> windowDS = skuIdKeyedDS.window(TumblingProcessingTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
+       // 聚合操作
+       SingleOutputStreamOperator<TradeSkuOrderBean> reduceDS = windowDS.reduce(
                 new ReduceFunction<TradeSkuOrderBean>() {
                     @Override
                     public TradeSkuOrderBean reduce(TradeSkuOrderBean value1, TradeSkuOrderBean value2) throws Exception {
@@ -193,7 +199,7 @@ public class DwsTradeSkuOrderWindow {
                     }
                 }
         );
-
+       //  获取维度表的 商品信息   将信息添加到TradeSkuOrderBean 对象中
         SingleOutputStreamOperator<TradeSkuOrderBean> withSkuInfoDS = reduceDS.map(
                 new RichMapFunction<TradeSkuOrderBean, TradeSkuOrderBean>() {
                     private Connection hbaseConn;
@@ -220,6 +226,8 @@ public class DwsTradeSkuOrderWindow {
                     }
                 }
         );
+
+        // 根据维度表dim_spu_info  获取商品名称字段
         SingleOutputStreamOperator<TradeSkuOrderBean> withSpuInfoDS = withSkuInfoDS.map(
 
                 new RichMapFunction<TradeSkuOrderBean, TradeSkuOrderBean>() {
@@ -246,6 +254,7 @@ public class DwsTradeSkuOrderWindow {
                 }
         );
 
+        // 根据维度表dim_base_trademark  获取tm_name字段
         SingleOutputStreamOperator<TradeSkuOrderBean> withTmDS = withSpuInfoDS.map(
 
                 new RichMapFunction<TradeSkuOrderBean, TradeSkuOrderBean>() {
@@ -272,6 +281,7 @@ public class DwsTradeSkuOrderWindow {
                 }
         );
 
+        //根据维度表 dim_base_category3  获取相关信息
         SingleOutputStreamOperator<TradeSkuOrderBean> c3Stream = withTmDS.map(
 
                 new RichMapFunction<TradeSkuOrderBean, TradeSkuOrderBean>() {
@@ -298,6 +308,8 @@ public class DwsTradeSkuOrderWindow {
                     }
                 }
         );
+
+        //根据维度表dim_base_category2  获取相关信息
         SingleOutputStreamOperator<TradeSkuOrderBean> c2Stream = c3Stream.map(
 
                 new RichMapFunction<TradeSkuOrderBean, TradeSkuOrderBean>() {
@@ -325,6 +337,7 @@ public class DwsTradeSkuOrderWindow {
                     }
                 }
         );
+        //根据维度表dim_base_category1  获取name 字段
         SingleOutputStreamOperator<TradeSkuOrderBean> c1Stream = c2Stream.map(
 
                 new RichMapFunction<TradeSkuOrderBean, TradeSkuOrderBean>() {

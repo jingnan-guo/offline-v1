@@ -13,7 +13,7 @@ import java.util.List;
  * @Package com.gjn.util.JdbcUtil
  * @Author jingnan.guo
  * @Date 2025/4/15 9:14
- * @description:
+ * @description:  通过JDBC操作MySQL数据库
  */
 public class JdbcUtil {
     public static Connection getMySQLConnection() throws Exception {

@@ -8,7 +8,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dwd.DwdTradeOrderRefund
  * @Author jingnan.guo
  * @Date 2025/4/16 10:57
- * @description:
+ * @description:    退单事实表
  *      zk、kafka、maxwell、hdfs、hbase、DwdTradeOrderRefund
  */
 public class DwdTradeOrderRefund  {
@@ -17,6 +17,7 @@ public class DwdTradeOrderRefund  {
         env.setParallelism(1);
         StreamTableEnvironment tenv = StreamTableEnvironment.create(env);
 
+        // 从kafka主题中读取数据  创建动态表
         tenv.executeSql("" +
                 "CREATE TABLE db (\n" +
                 "  before MAP<string,string>,\n" +
@@ -36,6 +37,7 @@ public class DwdTradeOrderRefund  {
                 "  'format' = 'json'\n" +
                 ")");
 
+        // 从hbase中读取 字典表
         tenv.executeSql("CREATE TABLE base_dic (\n" +
                 " dic_code String,\n" +
                 " info ROW<dic_name String>,\n" +
@@ -47,7 +49,7 @@ public class DwdTradeOrderRefund  {
                 ");");
 
 
-
+        // 过滤出 订单表
         Table orderRefundInfo = tenv.sqlQuery(
                 "select " +
                         "after['id'] id," +
@@ -66,6 +68,7 @@ public class DwdTradeOrderRefund  {
                         "where source['table']='order_refund_info'");
         tenv.createTemporaryView("order_refund_info", orderRefundInfo);
 
+        // 过滤订单表中的退单数据
         Table orderInfo = tenv.sqlQuery(
                 "select " +
                         "after['id'] id," +
@@ -78,6 +81,7 @@ public class DwdTradeOrderRefund  {
                         "and `after`['order_status']='1005' ");
         tenv.createTemporaryView("order_info", orderInfo);
 
+        // 进行关联
         Table result = tenv.sqlQuery(
                 "select " +
                         "ri.id," +
@@ -104,6 +108,7 @@ public class DwdTradeOrderRefund  {
                         "on ri.refund_reason_type=dic2.dic_code ");
         tenv.toChangelogStream(result).print();
 
+        // 将关联结果写入kafka 主题
         tenv.executeSql(
                 "create table dwd_trade_order_refund(" +
                         "id string," +

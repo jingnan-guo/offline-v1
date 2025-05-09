@@ -8,7 +8,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @Package com.gjn.dwd.DwdTradeOrderCancelDetail
  * @Author jingnan.guo
  * @Date 2025/4/16 10:57
- * @description:
+ * @description:   取消订单事实表
  *      zk、kafka、maxwell、DwdTradeOrderDetail、DwdTradeOrderCancelDetail
  */
 public class DwdTradeOrderCancelDetail  {
@@ -17,6 +17,7 @@ public class DwdTradeOrderCancelDetail  {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         StreamTableEnvironment tenv = StreamTableEnvironment.create(env);
+        // 从kafka主题中读取数据 并且动态建表
         tenv.executeSql("" +
                 "CREATE TABLE db (\n" +
                 "  before MAP<string,string>,\n" +
@@ -33,7 +34,9 @@ public class DwdTradeOrderCancelDetail  {
                 "  'scan.startup.mode' = 'earliest-offset',\n" +
                 "  'format' = 'json'\n" +
                 ")");
-
+//        Table table = tenv.sqlQuery("select * from db");
+//        tenv.toChangelogStream(table).print();
+        //过滤出取消订单行为
         Table orderCancel = tenv.sqlQuery("select " +
                 " `after`['id'] id, " +
                 " `after`['operate_time'] operate_time, " +
@@ -43,9 +46,10 @@ public class DwdTradeOrderCancelDetail  {
                 "and `op`='u' " +
                 "and `before`['order_status']='1001' " +
                 "and `after`['order_status']='1003' ");
-//        tenv.toChangelogStream(orderCancel).print();
+        tenv.toChangelogStream(orderCancel).print();
         tenv.createTemporaryView("order_cancel", orderCancel);
 
+        //从下单事实表中获取下单数据
         tenv.executeSql("CREATE TABLE dwd_trade_order_detail (\n" +
                 "id string," +
                 "order_id string," +
@@ -74,6 +78,7 @@ public class DwdTradeOrderCancelDetail  {
                 ");");
 
 
+        //将下单事实表和取消订单表进行关联
         Table result = tenv.sqlQuery(
                 "select  " +
                         "od.id," +
@@ -98,6 +103,7 @@ public class DwdTradeOrderCancelDetail  {
                         "on od.order_id=oc.id ");
         tenv.toChangelogStream(result).print();
 
+        //将关联的结果写到kafka主题中
         tenv.executeSql(
                 "create table dwd_trade_order_cancel(" +
                         "id string," +

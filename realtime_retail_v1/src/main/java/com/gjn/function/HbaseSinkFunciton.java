@@ -12,7 +12,7 @@ import org.apache.hadoop.hbase.client.Connection;
  * @Package com.gjn.function.HbaseSinkFunciton
  * @Author jingnan.guo
  * @Date 2025/4/14 10:45
- * @description:将流中的数据同步到hbase表中
+ * @description: 将流中的数据同步到hbase表中
  */
 public class HbaseSinkFunciton extends RichSinkFunction<Tuple2<JSONObject, TableProcessDim>> {
     private Connection hbaseConn;

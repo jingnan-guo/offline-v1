@@ -20,12 +20,11 @@ import java.util.Set;
  * @Package com.gjn.util.HBaseUtil
  * @Author jingnan.guo
  * @Date 2025/4/9 15:30
- * @description:
+ * @description:  操作HBase的工具类
  */
 public class HBaseUtil {
 
-    //获取hbase 连接方法
-
+    //获取异步操作HBase的连接对象
     public static Connection getHBaseConnection() throws IOException {
         Configuration conf = HBaseConfiguration.create();
         conf.set("hbase.zookeeper.quorum","cdh01,cdh02,cdh03");
@@ -34,7 +33,7 @@ public class HBaseUtil {
         return hbaseConn;
     }
 
-    //关闭连接方法
+    //关闭异步操作HBase的连接对象
     public static void closeHBaseConnection( Connection hbaseConn) throws IOException {
         if(hbaseConn!=null && !hbaseConn.isClosed()){
             hbaseConn.close();

@@ -41,7 +41,7 @@ import java.util.*;
  * @Package com.gjn.dwd.DwdBaseDb
  * @Author jingnan.guo
  * @Date 2025/4/15 9:29
- * @description:
+ * @description:     处理逻辑比较简单的事实表动态分流处理       数据源：stream_realtime_dev1
  *
  */
 public class DwdBaseDb {
@@ -71,6 +71,7 @@ public class DwdBaseDb {
         DataStreamSource<String> kafkaStrDS = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
 
 
+        //  对流中的数据进行类型转换并进行简单的ETL jsonStr->jsonObj
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.process(
                 new ProcessFunction<String, JSONObject>() {
                     @Override
@@ -92,7 +93,7 @@ public class DwdBaseDb {
 ////        {"op":"u","before":{"is_ordered":0,"cart_price":9199.0,"sku_num":1,"create_time":1743884105000,"user_id":"310","sku_id":18,"sku_name":"TCL 75Q10 75英寸 QLED原色量子点电视 安桥音响 AI声控智慧屏 超薄全面屏 MEMC防抖 3+32GB 平板电视","id":1091},"after":{"is_ordered":1,"cart_price":9199.0,"sku_num":1,"create_time":1743884105000,"user_id":"310","sku_id":18,"sku_name":"TCL 75Q10 75英寸 QLED原色量子点电视 安桥音响 AI声控智慧屏 超薄全面屏 MEMC防抖 3+32GB 平板电视","id":1091,"order_time":1743884138000,"operate_time":1743884138000},"source":{"thread":109,"server_id":1,"version":"1.9.7.Final","file":"mysql-bin.000007","connector":"mysql","pos":5243296,"name":"mysql_binlog_source","row":0,"ts_ms":1744544393000,"snapshot":"false","db":"gmall_config","table":"cart_info"},"ts_ms":1744544393753}
 ////        {"op":"u","before":{"is_ordered":0,"cart_price":6699.0,"sku_num":1,"create_time":1743884126000,"user_id":"310","sku_id":17,"sku_name":"TCL 65Q10 65英寸 QLED原色量子点电视 安桥音响 AI声控智慧屏 超薄全面屏 MEMC防抖 3+32GB 平板电视","id":1093},"after":{"is_ordered":1,"cart_price":6699.0,"sku_num":1,"create_time":1743884126000,"user_id":"310","sku_id":17,"sku_name":"TCL 65Q10 65英寸 QLED原色量子点电视 安桥音响 AI声控智慧屏 超薄全面屏 MEMC防抖 3+32GB 平板电视","id":1093,"order_time":1743884138000,"operate_time":1743884138000},"source":{"thread":109,"server_id":1,"version":"1.9.7.Final","file":"mysql-bin.000007","connector":"mysql","pos":5246064,"name":"mysql_binlog_source","row":0,"ts_ms":1744544393000,"snapshot":"false","db":"gmall_config","table":"cart_info"},"ts_ms":1744544393756}
 
-
+        //  使用FlinkCDC读取配置表中的配置信息
         MySqlSource<String> mySqlSource = FlinkSourceUtil.getMySqlSource("gmall2024_config", "table_process_dwd");
         DataStreamSource<String> mysqStrDS = env.fromSource(mySqlSource, WatermarkStrategy.noWatermarks(), "mysql_source");
         SingleOutputStreamOperator<TableProcessDwd> tpDS = mysqStrDS.map(
@@ -113,16 +114,17 @@ public class DwdBaseDb {
                     }
                 }
         );
-//        tpDS.print();
+        tpDS.print();
 //        TableProcessDwd(sourceTable=favor_info, sourceType=insert, sinkTable=dwd_interaction_favor_add, sinkColumns=id,user_id,sku_id,create_time, op=r)
 //        TableProcessDwd(sourceTable=coupon_use, sourceType=update, sinkTable=dwd_tool_coupon_use, sinkColumns=id,coupon_id,user_id,order_id,using_time,used_time,coupor, op=r)
 
+        //      对配置流进行广播 ---broadcast
         MapStateDescriptor<String, TableProcessDwd> mapStateDescriptor
                 = new MapStateDescriptor<String, TableProcessDwd>("mapStateDescriptor",String.class, TableProcessDwd.class);
         BroadcastStream<TableProcessDwd> broadcastDS = tpDS.broadcast(mapStateDescriptor);
-
+        //      联主流业务数据和广播流中的配置数据   --- connect
         BroadcastConnectedStream<JSONObject, TableProcessDwd> connectDS = jsonObjDS.connect(broadcastDS);
-
+        //      对关联后的数据进行处理   --- process
         SingleOutputStreamOperator<Tuple2<JSONObject,TableProcessDwd>> splitDS = connectDS.process(
                 new BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject,TableProcessDwd>>() {
                     private Map<String,TableProcessDwd> configMap = new HashMap<>();
@@ -194,9 +196,12 @@ public class DwdBaseDb {
 //        SingleOutputStreamOperator<Tuple2<JSONObject, TableProcessDwd>> splitDS = connectDS.process(new BaseDbTableProcessFunction(mapStateDescriptor));
 //        splitDS.print();
 
+        //    将处理逻辑比较简单的事实表数据写到kafka的不同主题中
         splitDS.sinkTo(FlinkSinkUtil.getKafkaSink());
         env.execute();
     }
+
+    //删除 dataJsonObj 中不属于该列表的字段
     private static void deleteNoeedColumns(JSONObject dataJsonObj, String sinkColumns) {
         List<String> columnList = Arrays.asList(sinkColumns.split(","));
 

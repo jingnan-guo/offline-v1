@@ -37,7 +37,7 @@ import org.apache.flink.util.Collector;
  *  @Package com.gjn.dws.DwsUserUserLoginWindow
  *  @Author jingnan.guo
  *  @Date 2025/4/17 11:47
- * @description: 独立用户以及回流用户聚合统计
+         * @description: 独立用户以及回流用户聚合统计  数据源：dwd_traffic_page
  */
 public class DwsUserUserLoginWindow {
     @SneakyThrows
@@ -64,8 +64,10 @@ public class DwsUserUserLoginWindow {
 
         DataStreamSource<String> kafkaStrDS = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
 
+        // 数据类型转换 jsonStr->jsonObj
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.map(JSON::parseObject);
 
+        // 过滤出 登录 行为
         SingleOutputStreamOperator<JSONObject> filterDS = jsonObjDS.filter(
                 new FilterFunction<JSONObject>() {
                     @Override
@@ -77,7 +79,7 @@ public class DwsUserUserLoginWindow {
                     }
                 }
         );
-
+        //  指定watermark
         SingleOutputStreamOperator<JSONObject> withWatermarkDS = filterDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy
                         .<JSONObject>forMonotonousTimestamps()
@@ -90,10 +92,10 @@ public class DwsUserUserLoginWindow {
                                 }
                         )
         );
-
+        //  按照uid进行分组
         KeyedStream<JSONObject, String> keyedDS = withWatermarkDS.keyBy(o -> o.getJSONObject("common").getString("uid"));
 
-
+        //   使用Flink的状态编程  判断是否为独立用户以及回流用户
         SingleOutputStreamOperator<UserLoginBean> beanDS = keyedDS.process(
                 new KeyedProcessFunction<String, JSONObject, UserLoginBean>() {
                     private ValueState<String> lastLoginDateState;
@@ -140,8 +142,9 @@ public class DwsUserUserLoginWindow {
                 }
         );
 
+        //  开窗
         AllWindowedStream<UserLoginBean, TimeWindow> windowDS = beanDS.windowAll(TumblingEventTimeWindows.of(Time.seconds(10)));
-
+        //  聚合
         SingleOutputStreamOperator<UserLoginBean> reduceDS = windowDS.reduce(
                 new ReduceFunction<UserLoginBean>() {
                     @Override
